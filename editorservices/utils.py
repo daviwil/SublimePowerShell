@@ -1,5 +1,6 @@
 import os
 import sublime
+from .logger import log
 
 _PowerShellExtensions = set([
         "ps1",
@@ -11,6 +12,7 @@ _PowerShellExtensions = set([
     ])
 
 def is_ps_file(view):
+    global _PowerShellExtensions
     filePath = view.file_name()
     if filePath:
         (root, ext) = os.path.splitext(filePath)
@@ -21,3 +23,22 @@ def is_ps_file(view):
 
 def get_view_contents(view):
     return view.substr(sublime.Region(0, view.size()))
+
+_outputView = None
+def get_output_view():
+    global _outputView
+
+    if _outputView is None:
+        window = sublime.active_window()
+        for view in window.views():
+            if view.name() == "PowerShell Output":
+                _outputView = view
+                break
+
+        if _outputView is None:
+            _outputView = sublime.active_window().new_file()
+            _outputView.set_name("PowerShell Output")
+            _outputView.set_read_only(True)
+            _outputView.set_scratch(True)
+
+    return _outputView

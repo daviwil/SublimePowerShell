@@ -6,6 +6,7 @@ from .editorservices.editor import editor
 from .editorservices.logger import log
 from .editorservices.settings import PowerShellPluginSettings
 from .editorservices.listeners import *
+from .editorservices.commands import *
 
 def plugin_loaded():
 
@@ -30,6 +31,8 @@ def plugin_loaded():
             editor.start()
 
             log.info("PowerShell plugin started.")
+
+
 
         else:
             log.error("Could not find PowerShell Editor Services Host at this path!")

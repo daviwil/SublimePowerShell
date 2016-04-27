@@ -33,15 +33,21 @@ ContentLengthHeaderString = "Content-Length: "
 def write_message(message, id, inputStream):
     messageObject = {"jsonrpc": "2.0"}
     messageObject["params"] = message
-    messageObject["method"] = message.__class__.__method
-    messageType = message.__class__.__type
+    messageObject["method"] = getattr(message.__class__, "__method", "NONE")
+    messageType = getattr(message.__class__, "__type", MessageType.Unknown)
+
+    log.debug("write_message -- messageType: %d", messageType)
 
     messageTypeName = "UNKNOWN"
-    if messageType is MessageType.Request:
+    if messageType == MessageType.Request:
         messageObject["id"] = id
         messageTypeName = "request"
-    else:
+    elif messageType == MessageType.Event:
         messageTypeName = "event"
+        #messageObject["method"] = message.__class__.__method
+    else:
+        messageObject["id"] = id
+        messageTypeName = "response"
 
     log.debug("Sending %s '%s':\n%s",
               messageTypeName,

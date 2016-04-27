@@ -36,3 +36,8 @@ class PowerShellEventListener(sublime_plugin.EventListener):
         if command_name == "exit":
             log.info("Stopping client and exiting...")
             client.stop()
+        elif command_name in ["close_all", "close_window", "close_project"]:
+            log.info("Stopping client and exiting...")
+            client.stop()
+        
+        return None

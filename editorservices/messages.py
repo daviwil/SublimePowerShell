@@ -1,4 +1,5 @@
 from .protocol import request, event
+from .model import Position, Range
 
 # Request Types
 
@@ -7,6 +8,25 @@ class InitializeRequest:
     def __init__(self, rootPath):
         self.rootPath = rootPath
         self.capabilities = {}
+
+@request("evaluate")
+class EvaluateRequest:
+    def __init__(self, expression):
+        self.expression = expression
+        self.context = "repl"
+
+@request("powerShell/invokeExtensionCommand")
+class InvokeExtensionCommandRequest:
+    def __init__(self, commandName, editorContext):
+        self.Name = commandName
+        self.Context = editorContext
+
+@request("editor/insertText")
+class InsertTextRequest:
+    def __init__(self, params):
+        self.FilePath = params.get("filePath")
+        self.InsertText = params.get("insertText")
+        self.InsertRange = Range.from_dict(params.get("insertRange", {}))
 
 # Event Types
 
@@ -42,6 +62,19 @@ class DiagnosticsEvent:
     def __init__(self, params):
         self.uri = params.get("uri")
         self.diagnostics = params.get("diagnostics", [])
+
+@event("output")
+class OutputEvent:
+    def __init__(self, params):
+        self.output = params.get("output")
+        self.category = params.get("category")
+
+@event("powerShell/extensionCommandAdded")
+class ExtensionCommandAddedEvent:
+    def __init__(self, params):
+        self.name = params.get("name")
+        self.displayName = params.get("displayName")
+
 
 # Utility Types
 
