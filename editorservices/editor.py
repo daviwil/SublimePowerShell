@@ -8,6 +8,7 @@ class EditorClient:
 
     def __init__(self):
         self.openedFiles = {}
+        self.pendingCompletionHandler = None
 
     def start(self):
         # Attach event handlers to the client
@@ -53,7 +54,26 @@ class EditorClient:
                             view.file_name()))
 
     def file_changed(self, view):
-        pass
+        if is_ps_file(view):
+            # For each file change, send the entire file buffer since
+            # Sublime does not tell us what part of the file has been
+            # changed for each edit
+            client.sendEvent(
+                FileChangedEvent(
+                    view.file_name(),
+                    Range.from_positions(
+                        Position.from_rowcol(view.rowcol(0)),
+                        Position.from_rowcol(view.rowcol(view.size()))),
+                    get_view_contents(view)))
+
+    def get_completions(self, view, position, completionHandler):
+        log.debug("get_completions: ", view.file_name())
+        if is_ps_file(view):
+            client.sendRequest(
+                CompletionRequest(
+                    view.file_name(),
+                    Position.from_rowcol(position)),
+                lambda c: completionHandler(view, c))
 
     def _handle_diagnostics(self, diagnostics):
         log.debug("Diagnostics received for file: %s", diagnostics.uri)

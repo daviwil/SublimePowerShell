@@ -17,25 +17,15 @@ def plugin_loaded():
         # Load user settings
         settings = PowerShellPluginSettings("Preferences.sublime-settings")
 
-        hostPath = settings.developer.editorServicesHostPath
-        if not hostPath:
-            hostPath = os.path.expanduser("~\\.vscode\\extensions\\ms-vscode.PowerShell\\bin\\Microsoft.PowerShell.EditorServices.Host.exe")
-            log.info("Using default PowerShell Editor Services Host path: %s", hostPath)
-        else:
-            log.info("Found PowerShell Editor Services Host Path from settings: %s", hostPath)
+        modulePath = settings.developer.editorServicesModulePath
+        if modulePath:
+            log.info("Found PowerShell Editor Services module path from settings: %s", modulePath)
 
-        if os.path.exists(hostPath):
-            client.start(hostPath, settings.developer.waitForDebugger)
+        # Start the editor client
+        client.start(modulePath, settings.developer.waitForDebugger)
+        editor.start()
 
-            # Start the editor client
-            editor.start()
-
-            log.info("PowerShell plugin started.")
-
-
-
-        else:
-            log.error("Could not find PowerShell Editor Services Host at this path!")
+        log.info("PowerShell plugin started.")
 
     else:
         # TODO: Show message to user?

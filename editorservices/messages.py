@@ -15,6 +15,12 @@ class EvaluateRequest:
         self.expression = expression
         self.context = "repl"
 
+@request("textDocument/completion")
+class CompletionRequest:
+    def __init__(self, uri, position):
+        self.uri = uri
+        self.position = position
+
 @request("powerShell/invokeExtensionCommand")
 class InvokeExtensionCommandRequest:
     def __init__(self, commandName, editorContext):
@@ -41,21 +47,25 @@ class FileClosedEvent:
     def __init__(self, uri):
         self.uri = uri
 
-@event("textDocument/didClose")
+@event("textDocument/didChange")
 class FileChangedEvent:
     def __init__(self, uri, region, text):
         self.uri = uri
         self.contentChanges = [
             {
-                "start": {
-                    "line": region.start.line
+                "range": {
+                    "start": {
+                        "line": region.Start.Line,
+                        "character": region.Start.Character
+                    },
+                    "end": {
+                        "line": region.End.Line,
+                        "character": region.End.Character
+                    }
                 },
-                "end": {
-
-                }
+                "text": text
             }
         ]
-        self.text = text
 
 @event("textDocument/publishDiagnostics")
 class DiagnosticsEvent:
@@ -74,11 +84,3 @@ class ExtensionCommandAddedEvent:
     def __init__(self, params):
         self.name = params.get("name")
         self.displayName = params.get("displayName")
-
-
-# Utility Types
-
-#class Region:
-
-#    def __init__(self, startLine, startColumn, endLine, endColumn):
-#        this.

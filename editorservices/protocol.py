@@ -83,7 +83,17 @@ def read_message(outputStream):
         if messageJson == None:
             log.error("Language Server terminated unexpectedly!")
 
-        return json.loads(messageJson.decode('utf-8'))
+        messageObject = json.loads(messageJson.decode('utf-8'))
+
+        # Log the response object
+        log.debug("Received message:\n%s",
+                json.dumps(messageObject,
+                            sort_keys=True,
+                            indent=4,
+                            cls=MessageEncoder,
+                            separators=(',', ': ')))
+
+        return messageObject
 
     else:
         #print "Expected Content-Length header!"

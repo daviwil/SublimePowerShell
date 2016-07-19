@@ -2,25 +2,60 @@ from .protocol import write_message, read_message, MessageType
 from .messages import InitializeRequest
 from .logger import log
 import io
+import json
 import os
+import socket
 import sublime
 import subprocess
+import tempfile
 import threading
+import time
 
 class LanguageServerClient:
     __isRunning = False
 
-    def start(self, editorServicesHostPath, waitForDebugger=False):
-        self._editorServicesHostPath = editorServicesHostPath
+    def start(self, editorServicesModulePath, waitForDebugger=False):
+        self._editorServicesModulePath = editorServicesModulePath
         self.messageId = 0
 
+        requiredEditorServicesVersion = "0.7.0"
+        startScriptPath = os.path.dirname(os.path.realpath(__file__)) + "\\Start-EditorServices.ps1"
+        languageServicePipeName = "PSES-Sublime-LanguageService-" + str(os.getpid())
+        debugServicePipeName = "PSES-Sublime-DebugService-" + str(os.getpid())
+
+        log.debug("temp: %s", tempfile.tempdir)
+        logFileName = str(int(time.time())) + "-EditorServices.log"
+        logPath = os.path.join(tempfile.gettempdir(), logFileName)
+        log.debug("PowerShell Editor Services log path: %s", logPath)
+
+        scriptArgs = \
+            '-EditorServicesVersion "' + requiredEditorServicesVersion + '" ' + \
+            '-HostName "Sublime Text Host" ' + \
+            '-HostProfileId "SublimeText" ' + \
+            '-HostVersion "3.0.' + sublime.version() + '" ' + \
+            '-LogLevel "Verbose" ' + \
+            '-LogPath "' + logPath + '" '
+            #'-LanguageServicePipeName "' + languageServicePipeName + '" ' + \
+            #'-DebugServicePipeName "' + debugServicePipeName + '" ' + \
+            #'-WaitForCompletion '
+
+        if editorServicesModulePath:
+            scriptArgs += '-BundledModulesPath "' + editorServicesModulePath + '"'
+
+        if waitForDebugger:
+            scriptArgs += "-WaitForDebugger"
+
+        log.debug("Startup script path: %s", startScriptPath)
+        log.debug("Startup script args: %s", scriptArgs)
+
         args = [
-            self._editorServicesHostPath,
-            "/logLevel:Verbose",
-            "/hostName:Sublime Text",
-            "/hostProfileId:SublimeText",
-            #"/waitForDebugger"
+            'powershell.exe',
+            '-NoProfile',
+            '-NonInteractive',
+            '-ExecutionPolicy', 'Unrestricted',
+            '-Command', '& "' + startScriptPath + '" ' + scriptArgs
         ]
+
         startupinfo = None
 
         if os.name == "nt":
@@ -28,19 +63,50 @@ class LanguageServerClient:
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.SW_HIDE | subprocess.STARTF_USESHOWWINDOW
 
-        if waitForDebugger:
-            args.append("/waitForDebugger")
-
         self.languageServerProcess = subprocess.Popen(
             args,
             bufsize=io.DEFAULT_BUFFER_SIZE,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             startupinfo=startupinfo,
             universal_newlines=False)
 
-        self.stdIn = self.languageServerProcess.stdin
-        self.stdOut = self.languageServerProcess.stdout
+        # Gather the launch response
+        response = self.languageServerProcess.stdout.readline();
+        log.debug("Launch response: %s", response)
+        responseObject = json.loads(response.decode('utf-8'))
+        log.debug("Server started, languageServicePort: %d", responseObject["languageServicePort"])
+
+        # Was an error written to stderr upon startup?
+        # loopCount = 0
+        # errorString = ""
+        # while True:
+        #     if loopCount > 2:
+        #         break
+        #     loopCount += 1
+
+        #     errorLine = self.languageServerProcess.stderr.readline();
+        #     break
+        #     log.debug("Error: %s vs %s", errorLine, "")
+        #     if errorLine == "":
+        #         if len(errorString) > 0:
+        #             log.debug("Error when launching powershell.exe:")
+        #             log.debug("%s", errorLine)
+        #             return
+        #         else:
+        #             break
+        #     else:
+        #         log.debug("Error string: %s", errorLine)
+        #         errorString.append(errorLine)
+
+        # Connect to the socket
+        self.languageServiceSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.languageServiceSocket.connect(('localhost', responseObject["languageServicePort"]))
+        self.socketIn = self.languageServiceSocket.makefile('wb')
+        self.socketOut = self.languageServiceSocket.makefile('rb')
+
+        log.debug("Connected to language service!")
 
         self.requestCallbacks = {}
         self.requestHandlers = {}
@@ -49,8 +115,8 @@ class LanguageServerClient:
         # Start a new thread for the message loop
         LanguageServerClient.__isRunning = True
         self.readerThread = threading.Thread(
-            target=LanguageServerClient.__messageLoop,
-            args=(self.stdIn, self.stdOut, self.requestCallbacks, self.requestHandlers, self.eventHandlers))
+           target=LanguageServerClient.__messageLoop,
+           args=(self.socketIn, self.socketOut, self.requestCallbacks, self.requestHandlers, self.eventHandlers))
         self.readerThread.daemon = True
         self.readerThread.start()
 
@@ -58,23 +124,21 @@ class LanguageServerClient:
         self.sendRequest(InitializeRequest(""), self.__handleInitializeResponse)
 
     def stop(self):
-        sublime.message_dialog("Kill it!")
         if LanguageServerClient.__isRunning:
             LanguageServerClient.__isRunning = False
             self.languageServerProcess.kill()
-            sublime.message_dialog("Should be killed!")
             self.languageServerProcess = None
 
     def sendRequest(self, request, callback):
         self.messageId = self.messageId + 1
         self.requestCallbacks[self.messageId] = callback
-        write_message(request, self.messageId, self.stdIn)
+        write_message(request, self.messageId, self.socketIn)
 
     def sendResponse(self, requestId, responseBody):
-        write_message(responseBody, requestId, self.stdIn)
+        write_message(responseBody, requestId, self.socketIn)
 
     def sendEvent(self, event):
-        write_message(event, 0, self.stdIn)
+        write_message(event, 0, self.socketIn)
 
     def setRequestHandler(self, requestType, requestHandler):
         log.debug("Attempting to set request handler...")
